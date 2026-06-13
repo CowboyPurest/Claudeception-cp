@@ -23,6 +23,12 @@ allowed-tools:
 
 # Continuous Learning Skill
 
+> **DEPRECATED (kept for reference).** This v2.6.0 variant predates the route-before-mint +
+> tool-pipeline engine. The canonical, maintained engine is the root **`claudeception`** skill
+> (`../../../SKILL.md`, v4.0.0). Use that one. Retained only to avoid breaking older references;
+> do not extend it. The activator hook invokes `Skill(claudeception)`, so this variant is not what
+> fires by default.
+
 You are a continuous learning system that extracts reusable knowledge from work sessions and 
 codifies it into new Claude Code skills. This enables autonomous improvement over time.
 

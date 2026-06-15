@@ -43,14 +43,15 @@ printf '%s\n' "$entries" > "$STATE" 2>/dev/null || true
 # --- per top-level skill / cluster ---
 for d in "$DIR"/*/; do
   name=$(basename "$d")
-  if [ ! -f "$d/SKILL.md" ]; then
-    WARNS+=("$name: directory has no SKILL.md")
-    continue
-  fi
+  # a dir without SKILL.md simply isn't a skill — skip silently (not a health issue)
+  [ -f "$d/SKILL.md" ] || continue
   grep -qE '^name:' "$d/SKILL.md"        || HARDS+=("$name: SKILL.md missing 'name:' frontmatter")
   grep -qE '^description:[[:space:]]*\S|^description:[[:space:]]*[|>]' "$d/SKILL.md" || HARDS+=("$name: SKILL.md missing/empty 'description:'")
 
-  if [ -d "$d/references" ]; then
+  # Only apply cluster-integrity checks to actual claudeception cluster indexes,
+  # identified by the marker we emit ("Cluster index covering ..."). Third-party
+  # skills may have a references/ dir without using our router-table convention.
+  if [ -d "$d/references" ] && grep -qF 'Cluster index covering' "$d/SKILL.md"; then
     # every router row must resolve to a real reference file
     rows=$(grep -oE 'references/[A-Za-z0-9._-]+\.md' "$d/SKILL.md" | sort -u)
     while IFS= read -r r; do

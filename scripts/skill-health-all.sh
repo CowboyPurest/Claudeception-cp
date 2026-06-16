@@ -45,6 +45,36 @@ check_registry_drift() {
   return 1
 }
 
+# --- fork drift: user-scope superpowers forks (writing-plans,
+# subagent-driven-development) vs the current upstream plugin SKILL.md. A fork is
+# intentionally divergent, so a fork-vs-upstream diff is noise; the useful signal
+# is "did UPSTREAM advance since we last reconciled?" — hash the current upstream
+# copy, compare to a stored baseline, alert when it changes. MONITOR-ONLY: porting
+# upstream improvements into the fork is a manual judgment call (never auto-merge).
+check_fork_drift() {
+  local STATE_DIR="$HOME/.claude/skill-health"; mkdir -p "$STATE_DIR" 2>/dev/null || true
+  local drift=() s fork up base cur
+  for s in writing-plans subagent-driven-development; do
+    fork="$HOME/.claude/skills/$s/SKILL.md"
+    [ -f "$fork" ] || continue
+    # current upstream copy: prefer the marketplace clone, else newest cached version
+    up=$(find "$HOME/.claude/plugins/marketplaces" -path "*superpowers-extended-cc*/skills/$s/SKILL.md" 2>/dev/null | head -1)
+    [ -n "$up" ] || up=$(find "$HOME/.claude/plugins/cache" -path "*superpowers-extended-cc*/skills/$s/SKILL.md" 2>/dev/null | sort -V | tail -1)
+    [ -n "$up" ] && [ -f "$up" ] || continue
+    cur=$(shasum "$up" 2>/dev/null | awk '{print $1}')
+    base="$STATE_DIR/fork-upstream-$s.hash"
+    if [ ! -f "$base" ]; then printf '%s\n' "$cur" > "$base"; continue; fi   # first run: set baseline, no alert
+    if [ "$cur" != "$(cat "$base" 2>/dev/null)" ]; then
+      drift+=("$s — upstream advanced; review & port into ~/.claude/skills/$s/  (upstream: $up)")
+      printf '%s\n' "$cur" > "$base"
+    fi
+  done
+  [ ${#drift[@]} -eq 0 ] && return 0
+  echo "### FORK DRIFT — superpowers-extended-cc upstream changed since last review (port manually; never auto-merge)"
+  printf '  - %s\n' "${drift[@]}"
+  return 1
+}
+
 clean=0
 report=()
 anyhard=0
@@ -65,8 +95,12 @@ done
 regout=$(check_registry_drift); regec=$?
 if [ -n "$regout" ]; then report+=("$regout"); [ "$regec" -ne 0 ] && anyhard=1; fi
 
+# superpowers fork drift (upstream advanced since last review)
+forkout=$(check_fork_drift); forkec=$?
+if [ -n "$forkout" ]; then report+=("$forkout"); [ "$forkec" -ne 0 ] && anyhard=1; fi
+
 if [ "${#report[@]}" -eq 0 ]; then
-  echo "ALL CLEAN: $clean skill dirs + registry, no issues."
+  echo "ALL CLEAN: $clean skill dirs + registry + forks, no issues."
   exit 0
 fi
 

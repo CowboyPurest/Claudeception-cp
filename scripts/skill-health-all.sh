@@ -75,6 +75,24 @@ check_fork_drift() {
   return 1
 }
 
+# --- claudeception fork drift: is the local CowboyPurest/Claudeception-cp fork
+# behind its upstream (blader/Claudeception)? Fetches upstream (network-resilient:
+# a failed fetch just reuses last-known refs, never false-alerts) and counts
+# upstream-only commits. MONITOR-ONLY — porting is a manual judgment call.
+check_claudeception_upstream() {
+  local REPO="$HOME/Code/Claudeception-cp"
+  [ -d "$REPO/.git" ] || return 0
+  git -C "$REPO" remote get-url upstream >/dev/null 2>&1 || return 0
+  git -C "$REPO" fetch upstream --quiet 2>/dev/null || true
+  local ub behind
+  ub=$(git -C "$REPO" rev-parse --verify --quiet upstream/main >/dev/null 2>&1 && echo upstream/main || echo upstream/master)
+  behind=$(git -C "$REPO" rev-list --count "main..$ub" 2>/dev/null)
+  [ -n "$behind" ] && [ "$behind" -gt 0 ] 2>/dev/null || return 0
+  echo "### CLAUDECEPTION FORK BEHIND UPSTREAM (port manually; never auto-merge)"
+  echo "  - Claudeception-cp main is $behind commit(s) behind blader/Claudeception ($ub); review: git -C $REPO log main..$ub --oneline"
+  return 1
+}
+
 clean=0
 report=()
 anyhard=0
@@ -98,6 +116,10 @@ if [ -n "$regout" ]; then report+=("$regout"); [ "$regec" -ne 0 ] && anyhard=1; 
 # superpowers fork drift (upstream advanced since last review)
 forkout=$(check_fork_drift); forkec=$?
 if [ -n "$forkout" ]; then report+=("$forkout"); [ "$forkec" -ne 0 ] && anyhard=1; fi
+
+# claudeception fork behind its blader/Claudeception upstream
+clauout=$(check_claudeception_upstream); clauec=$?
+if [ -n "$clauout" ]; then report+=("$clauout"); [ "$clauec" -ne 0 ] && anyhard=1; fi
 
 if [ "${#report[@]}" -eq 0 ]; then
   echo "ALL CLEAN: $clean skill dirs + registry + forks, no issues."
